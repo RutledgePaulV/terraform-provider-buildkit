@@ -14,7 +14,7 @@ func buildkitImageResource() *schema.Resource {
 		Schema: map[string]*schema.Schema{
 			"publish_targets": {
 				Type:     schema.TypeList,
-				MinItems: 1,
+				Optional: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"registry": {
@@ -38,7 +38,7 @@ func buildkitImageResource() *schema.Resource {
 			},
 			"dockerfile": {
 				Type:     schema.TypeString,
-				Required: false,
+				Optional: true,
 				Default:  "./Dockerfile",
 			},
 			"labels": {
@@ -63,6 +63,7 @@ func buildkitImageResource() *schema.Resource {
 			"ssh_sockets": {
 				Type:     schema.TypeMap,
 				ForceNew: true,
+				Optional: true,
 				Default: map[string]string{
 					"default": "$SSH_AUTH_SOCK",
 				},

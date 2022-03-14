@@ -2,6 +2,7 @@ package buildkit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/docker/cli/cli/command/image/build"
 	"github.com/docker/docker/api/types"
@@ -13,25 +14,29 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 func getCompiledTags(data *schema.ResourceData) []string {
 	tags := make([]string, 0)
-	publish_targets := data.Get("publish_targets").([]map[string]string)
+	publish_targets := data.Get("publish_targets").([]interface{})
 	for _, x := range publish_targets {
-		tags = append(tags, fmt.Sprintf("%s/%s:%s", x["registry"], x["name"], x["tag"]))
+		casted := x.(map[string]string)
+		tags = append(tags, fmt.Sprintf("%s/%s:%s", casted["registry"], casted["name"], casted["tag"]))
 	}
 	return tags
 }
 
 func getCompiledOutputs(data *schema.ResourceData) []types.ImageBuildOutput {
 	outputs := make([]types.ImageBuildOutput, 0)
-	publish_targets := data.Get("publish_targets").([]map[string]string)
+	publish_targets := data.Get("publish_targets").([]interface{})
 	for _, x := range publish_targets {
+		casted := x.(map[string]string)
 		outputs = append(outputs, types.ImageBuildOutput{
 			Type: "image",
 			Attrs: map[string]string{
-				"name": fmt.Sprintf("%s/%s:%s", x["registry"], x["name"], x["tag"]),
+				"name": fmt.Sprintf("%s/%s:%s", casted["registry"], casted["name"], casted["tag"]),
 				"push": "true",
 			},
 		})
@@ -40,11 +45,41 @@ func getCompiledOutputs(data *schema.ResourceData) []types.ImageBuildOutput {
 }
 
 func getCompiledBuildArgs(data *schema.ResourceData) map[string]*string {
-
+	result := map[string]*string{}
+	x := "test"
+	result["test"] = &x
+	return result
 }
 
 func getCompiledAuthConfigs(meta interface{}) map[string]types.AuthConfig {
+	result := map[string]types.AuthConfig{}
 
+	return result
+}
+
+func getCompiledLabels(data *schema.ResourceData) map[string]string {
+	result := map[string]string{}
+	for key, x := range data.Get("labels").(map[string]interface{}) {
+		casted := x.(string)
+		result[key] = casted
+	}
+	return result
+}
+
+func parseLineDelimitedJson(body io.ReadCloser) ([]interface{}, error) {
+	result := make([]interface{}, 0)
+	decoder := json.NewDecoder(body)
+	defer body.Close()
+	for decoder.More() {
+		var record interface{}
+		err := decoder.Decode(&record)
+		if err != nil {
+			return nil, err
+		} else {
+			result = append(result, record)
+		}
+	}
+	return result, nil
 }
 
 func createImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -59,9 +94,22 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 		})
 	}
 
+	currentDir, err := os.Getwd()
+
+	if err != nil {
+		return append(diagnostics, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  "Encountered error getting current directory.",
+		})
+	}
+
 	defer cli.Close()
 
 	contextDir := data.Get("context").(string)
+
+	if !strings.HasPrefix(contextDir, "/") {
+		contextDir = filepath.Join(currentDir, "../", contextDir)
+	}
 
 	excludePatterns, err := build.ReadDockerignore(contextDir)
 
@@ -79,6 +127,10 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 	defer tarHandle.Close()
 
 	dockerFilePath := data.Get("dockerfile").(string)
+
+	if !strings.HasPrefix(dockerFilePath, "/") {
+		dockerFilePath = filepath.Join(contextDir, dockerFilePath)
+	}
 
 	dockerFileHandle, err := os.Open(dockerFilePath)
 
@@ -109,7 +161,7 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 		BuildArgs:   getCompiledBuildArgs(data),
 		AuthConfigs: getCompiledAuthConfigs(meta),
 		Context:     tarHandle,
-		Labels:      data.Get("labels").(map[string]string),
+		Labels:      getCompiledLabels(data),
 		Version:     types.BuilderBuildKit,
 		Outputs:     outputs,
 
@@ -143,7 +195,10 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 	}
 
 	response, err := cli.ImageBuild(context, tarHandle, options)
-	defer response.Body.Close()
+
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
 
 	if err != nil {
 		return append(diagnostics, diag.Diagnostic{
@@ -152,16 +207,36 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 		})
 	}
 
-	asText, err := io.ReadAll(response.Body)
+	if response.Body != nil {
+		asText, err := parseLineDelimitedJson(response.Body)
 
-	if err != nil {
-		return append(diagnostics, diag.Diagnostic{
-			Severity: diag.Error,
-			Summary:  "Encountered error parsing response from docker build process.",
-		})
+		errorCount := len(diagnostics)
+
+		for _, x := range asText {
+			casted := x.(map[string]interface{})
+			if val, ok := casted["error"]; ok {
+				asJson, _ := json.MarshalIndent(casted, "", "    ")
+
+				diagnostics = append(diagnostics, diag.Diagnostic{
+					Severity: diag.Error,
+					Summary:  val.(string),
+					Detail:   string(asJson),
+				})
+			}
+		}
+
+		if err != nil {
+			diagnostics = append(diagnostics, diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  "Encountered error parsing response from docker build process.",
+			})
+		}
+
+		if errorCount < len(diagnostics) {
+			return diagnostics
+		}
+
 	}
-
-	print(asText)
 
 	return diagnostics
 }
