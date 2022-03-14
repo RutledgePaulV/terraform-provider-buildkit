@@ -2,20 +2,20 @@ package buildkit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/docker/cli/cli/command/image/build"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/go-units"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/uuid"
 	"io"
-	"os"
 	"path/filepath"
-	"strings"
 )
 
 func getCompiledTags(data *schema.ResourceData) []string {
@@ -82,6 +82,106 @@ func parseLineDelimitedJson(body io.ReadCloser) ([]interface{}, error) {
 	return result, nil
 }
 
+func getTarHandle(contextDir string) (io.ReadCloser, diag.Diagnostics) {
+
+	feedback := diag.Diagnostics{}
+
+	contextDir, _ = filepath.Abs(contextDir)
+
+	excludePatterns, err := build.ReadDockerignore(contextDir)
+
+	if err != nil {
+		return nil, append(feedback, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  fmt.Sprintf("Could not open .dockerignore file in directory '%s'.", contextDir),
+			Detail:   err.Error(),
+		})
+	}
+
+	tarHandle, err := archive.TarWithOptions(contextDir, &archive.TarOptions{
+		ExcludePatterns: excludePatterns,
+	})
+
+	if err != nil {
+		return nil, append(feedback, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  fmt.Sprintf("Encountered error opening archive of context directory '%s'.", contextDir),
+			Detail:   err.Error(),
+		})
+	}
+
+	return tarHandle, feedback
+}
+
+func parseResponse(source io.ReadCloser) ([]interface{}, diag.Diagnostics) {
+	feedback := diag.Diagnostics{}
+	results := make([]interface{}, 0)
+
+	defer source.Close()
+	asText, err := parseLineDelimitedJson(source)
+
+	if err != nil {
+		return results, append(feedback, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  "Error parsing line delimited json response from external process.",
+			Detail:   err.Error(),
+		})
+	} else {
+		for _, x := range asText {
+			casted := x.(map[string]interface{})
+			if val, ok := casted["error"]; ok {
+				asJson, _ := json.MarshalIndent(casted, "", "    ")
+				feedback = append(feedback, diag.Diagnostic{
+					Severity: diag.Error,
+					Summary:  val.(string),
+					Detail:   string(asJson),
+				})
+			} else {
+				results = append(results, casted)
+			}
+		}
+	}
+
+	return results, feedback
+}
+
+func inspectImageBySha(context context.Context, cli *client.Client, hash string) {
+
+}
+
+func getImageByTag(context context.Context, cli *client.Client, tag string) (*types.ImageSummary, diag.Diagnostics) {
+	feedback := diag.Diagnostics{}
+
+	images, err := cli.ImageList(context, types.ImageListOptions{
+		Filters: filters.NewArgs(filters.KeyValuePair{
+			Key:   "reference",
+			Value: tag,
+		}),
+	})
+
+	if err != nil {
+		return nil, append(feedback, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  "Experienced an error when trying to find an image by tag.",
+			Detail:   err.Error(),
+		})
+	}
+
+	if len(images) > 1 {
+		return nil, append(feedback, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  "After building docker image more than one image was found with an internal tag that should've been unique.",
+		})
+	} else if len(images) < 1 {
+		return nil, append(feedback, diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  "After building docker image, no images could be found with the expected internal tag.",
+		})
+	} else {
+		return &images[0], feedback
+	}
+}
+
 func createImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
 
@@ -94,104 +194,32 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 		})
 	}
 
-	currentDir, err := os.Getwd()
-
-	if err != nil {
-		return append(diagnostics, diag.Diagnostic{
-			Severity: diag.Error,
-			Summary:  "Encountered error getting current directory.",
-		})
-	}
-
 	defer cli.Close()
 
-	contextDir := data.Get("context").(string)
+	tarHandle, diags := getTarHandle(data.Get("context").(string))
 
-	if !strings.HasPrefix(contextDir, "/") {
-		contextDir = filepath.Join(currentDir, "../", contextDir)
-	}
-
-	excludePatterns, err := build.ReadDockerignore(contextDir)
-
-	tarHandle, err := archive.TarWithOptions(contextDir, &archive.TarOptions{
-		ExcludePatterns: excludePatterns,
-	})
-
-	if err != nil {
-		return append(diagnostics, diag.Diagnostic{
-			Severity: diag.Error,
-			Summary:  "Encountered error opening temporary tarball file to send to docker daemon for building.",
-		})
+	if len(diags) > 0 {
+		return append(diagnostics, diags...)
 	}
 
 	defer tarHandle.Close()
+	hash := sha256.New()
+	teedTarReader := io.TeeReader(tarHandle, hash)
 
 	dockerFilePath := data.Get("dockerfile").(string)
-
-	if !strings.HasPrefix(dockerFilePath, "/") {
-		dockerFilePath = filepath.Join(contextDir, dockerFilePath)
-	}
-
-	dockerFileHandle, err := os.Open(dockerFilePath)
-
-	if err != nil {
-		return append(diagnostics, diag.Diagnostic{
-			Severity: diag.Error,
-			Summary:  "Encountered error opening dockerfile.",
-		})
-	}
-
-	defer dockerFileHandle.Close()
-
-	dockerFileText, err := io.ReadAll(dockerFileHandle)
-
-	if err != nil {
-		return append(diagnostics, diag.Diagnostic{
-			Severity: diag.Error,
-			Summary:  "Encountered error reading dockerfile.",
-		})
-	}
-
+	internalTag := "terraform-provider-buildkit:" + uuid.GenerateUUID()
+	tags := append(getCompiledTags(data), internalTag)
 	outputs := getCompiledOutputs(data)
 
 	options := types.ImageBuildOptions{
-		// options influenced by terraform settings
-		Tags:        getCompiledTags(data),
-		Dockerfile:  string(dockerFileText),
+		Tags:        tags,
+		Dockerfile:  dockerFilePath,
 		BuildArgs:   getCompiledBuildArgs(data),
 		AuthConfigs: getCompiledAuthConfigs(meta),
-		Context:     tarHandle,
+		Context:     teedTarReader,
 		Labels:      getCompiledLabels(data),
-		Version:     types.BuilderBuildKit,
+		Version:     types.BuilderV1,
 		Outputs:     outputs,
-
-		// unexposed options
-		Squash:         false,
-		CacheFrom:      make([]string, 0),
-		SecurityOpt:    make([]string, 0),
-		ExtraHosts:     make([]string, 0),
-		Ulimits:        make([]*units.Ulimit, 0),
-		SuppressOutput: false,
-		RemoteContext:  "",
-		NoCache:        false,
-		Remove:         false,
-		ForceRemove:    false,
-		PullParent:     false,
-		Isolation:      container.IsolationDefault,
-		CPUSetCPUs:     "",
-		CPUSetMems:     "",
-		CPUShares:      0,
-		CPUQuota:       0,
-		CPUPeriod:      0,
-		Memory:         0,
-		MemorySwap:     0,
-		CgroupParent:   "",
-		NetworkMode:    "",
-		ShmSize:        0,
-		Target:         "",
-		SessionID:      "",
-		Platform:       "",
-		BuildID:        "",
 	}
 
 	response, err := cli.ImageBuild(context, tarHandle, options)
@@ -203,40 +231,29 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 	if err != nil {
 		return append(diagnostics, diag.Diagnostic{
 			Severity: diag.Error,
-			Summary:  "Encountered error while sending files to build docker image.",
+			Summary:  "Encountered error from daemon when attempting to build docker image.",
 		})
 	}
 
+	contextDigest := hex.EncodeToString(hash.Sum(nil))
+	_ = data.Set("context_digest", contextDigest)
+
 	if response.Body != nil {
-		asText, err := parseLineDelimitedJson(response.Body)
+		_, diags := parseResponse(response.Body)
 
-		errorCount := len(diagnostics)
-
-		for _, x := range asText {
-			casted := x.(map[string]interface{})
-			if val, ok := casted["error"]; ok {
-				asJson, _ := json.MarshalIndent(casted, "", "    ")
-
-				diagnostics = append(diagnostics, diag.Diagnostic{
-					Severity: diag.Error,
-					Summary:  val.(string),
-					Detail:   string(asJson),
-				})
-			}
+		if len(diags) > 0 {
+			return append(diagnostics, diags...)
 		}
-
-		if err != nil {
-			diagnostics = append(diagnostics, diag.Diagnostic{
-				Severity: diag.Error,
-				Summary:  "Encountered error parsing response from docker build process.",
-			})
-		}
-
-		if errorCount < len(diagnostics) {
-			return diagnostics
-		}
-
 	}
+
+	image, diags := getImageByTag(context, cli, internalTag)
+
+	if len(diags) > 0 {
+		return append(diagnostics, diags...)
+	}
+
+	data.SetId(image.ID)
+	_ = data.Set("image_digest", image.ID)
 
 	return diagnostics
 }

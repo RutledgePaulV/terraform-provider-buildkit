@@ -5,8 +5,8 @@ go 1.17
 require (
 	github.com/docker/cli v20.10.7+incompatible
 	github.com/docker/docker v20.10.12+incompatible
-	github.com/docker/go-units v0.4.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.9.0
+	github.com/hashicorp/uuid v0.0.0-20160311170451-ebb0a03e909c
 )
 
 require (
@@ -25,6 +25,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v2.8.0+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-units v0.4.0 // indirect
 	github.com/fatih/color v1.9.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect

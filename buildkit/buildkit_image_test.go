@@ -33,8 +33,11 @@ func step1() string {
 		provider buildkit {
 		}
 		resource buildkit_image this {
-			context = "/Users/prutledge/go/src/github.com/rutledgepaulv/terraform-provider-buildkit/examples/basic"
-			dockerfile = "/Users/prutledge/go/src/github.com/rutledgepaulv/terraform-provider-buildkit/examples/basic/Dockerfile"
+			context = "../examples/basic"
+			dockerfile = "./Dockerfile"
+			labels = {
+				"paul" = "love"
+			}
 		}
 	`
 }

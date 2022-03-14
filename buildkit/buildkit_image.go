@@ -68,10 +68,16 @@ func buildkitImageResource() *schema.Resource {
 					"default": "$SSH_AUTH_SOCK",
 				},
 			},
-			"sha256_digest": {
+			"context_digest": {
+				Type:        schema.TypeString,
+				ForceNew:    true,
+				Computed:    true,
+				Description: "The hash of the context directory contents except files which match a pattern contained in a .dockerignore file if present.",
+			},
+			"image_digest": {
 				Type:        schema.TypeString,
 				Computed:    true,
-				Description: "The hash of the image.",
+				Description: "The sha256 digest of the docker image. This is the canonical content addressable hash for a docker image.",
 			},
 		},
 	}
