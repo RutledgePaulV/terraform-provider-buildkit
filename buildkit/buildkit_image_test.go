@@ -1,10 +1,19 @@
 package buildkit
 
 import (
+	"context"
+	"github.com/docker/docker/client"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"testing"
 )
+
+func TestMe(t *testing.T) {
+	cli, _ := client.NewClientWithOpts()
+	result, _, _ := cli.ImageInspectWithRaw(context.TODO(), "sha256:3714362ff22a")
+	print(result.ID)
+
+}
 
 func TestProvider(t *testing.T) {
 	if err := Provider().InternalValidate(); err != nil {

@@ -145,8 +145,26 @@ func parseResponse(source io.ReadCloser) ([]interface{}, diag.Diagnostics) {
 	return results, feedback
 }
 
-func inspectImageBySha(context context.Context, cli *client.Client, hash string) {
+func getImageBySha(context context.Context, cli *client.Client, digest string) (*types.ImageSummary, diag.Diagnostics) {
+	feedback := diag.Diagnostics{}
+	imageDetails, _, err := cli.ImageInspectWithRaw(context, digest)
 
+	if err != nil {
+		return nil, append(feedback, diag.Diagnostic{})
+	}
+
+	return &types.ImageSummary{
+		Containers:  0,
+		Created:     0,
+		ID:          imageDetails.ID,
+		Labels:      imageDetails.Config.Labels,
+		ParentID:    imageDetails.Parent,
+		RepoDigests: imageDetails.RepoDigests,
+		RepoTags:    imageDetails.RepoTags,
+		SharedSize:  imageDetails.Size,
+		Size:        imageDetails.Size,
+		VirtualSize: imageDetails.VirtualSize,
+	}, feedback
 }
 
 func getImageByTag(context context.Context, cli *client.Client, tag string) (*types.ImageSummary, diag.Diagnostics) {
@@ -224,19 +242,12 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 
 	response, err := cli.ImageBuild(context, tarHandle, options)
 
-	if response.Body != nil {
-		defer response.Body.Close()
-	}
-
 	if err != nil {
 		return append(diagnostics, diag.Diagnostic{
 			Severity: diag.Error,
 			Summary:  "Encountered error from daemon when attempting to build docker image.",
 		})
 	}
-
-	contextDigest := hex.EncodeToString(hash.Sum(nil))
-	_ = data.Set("context_digest", contextDigest)
 
 	if response.Body != nil {
 		_, diags := parseResponse(response.Body)
@@ -254,17 +265,21 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 
 	data.SetId(image.ID)
 	_ = data.Set("image_digest", image.ID)
+	contextDigest := hex.EncodeToString(hash.Sum(nil))
+	_ = data.Set("context_digest", contextDigest)
 
 	return diagnostics
 }
 
 func readImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
+
 	return diagnostics
 }
 
 func updateImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
+
 	return diagnostics
 }
 
