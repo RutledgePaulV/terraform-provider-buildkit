@@ -99,6 +99,7 @@ func getTarHandle(contextDir string) (io.ReadCloser, diag.Diagnostics) {
 	}
 
 	tarHandle, err := archive.TarWithOptions(contextDir, &archive.TarOptions{
+		Compression:     archive.Gzip,
 		ExcludePatterns: excludePatterns,
 	})
 
@@ -236,7 +237,7 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 		AuthConfigs: getCompiledAuthConfigs(meta),
 		Context:     teedTarReader,
 		Labels:      getCompiledLabels(data),
-		Version:     types.BuilderV1,
+		Version:     types.BuilderBuildKit,
 		Outputs:     outputs,
 	}
 
@@ -246,6 +247,7 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 		return append(diagnostics, diag.Diagnostic{
 			Severity: diag.Error,
 			Summary:  "Encountered error from daemon when attempting to build docker image.",
+			Detail:   err.Error(),
 		})
 	}
 
