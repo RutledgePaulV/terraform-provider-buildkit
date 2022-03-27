@@ -1,19 +1,12 @@
 package buildkit
 
 import (
-	"context"
-	"github.com/docker/docker/client"
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"os"
 	"testing"
 )
-
-func TestMe(t *testing.T) {
-	cli, _ := client.NewClientWithOpts()
-	result, _, _ := cli.ImageInspectWithRaw(context.TODO(), "sha256:3714362ff22a")
-	print(result.ID)
-
-}
 
 func TestProvider(t *testing.T) {
 	if err := Provider().InternalValidate(); err != nil {
@@ -38,15 +31,26 @@ func TestAccImage_Basic(t *testing.T) {
 }
 
 func step1() string {
-	return `
+	return fmt.Sprintf(`
 		provider buildkit {
+			registry_auth {
+				hostname = "https://docker.io"
+				username = "%s"
+				password = "%s"
+			}
 		}
+
 		resource buildkit_image this {
 			context = "../examples/basic"
 			dockerfile = "./Dockerfile"
+			publish_target {
+				registry = "https://docker.io"
+			    name = "rutledgepaulv/paul-test"
+				tag = "latest"
+			}
 			labels = {
 				"paul" = "love"
 			}
 		}
-	`
+	`, os.Getenv("DOCKER_USERNAME"), os.Getenv("DOCKER_TOKEN"))
 }

@@ -18,42 +18,10 @@ import (
 	"path/filepath"
 )
 
-func getCompiledTags(data *schema.ResourceData) []string {
-	tags := make([]string, 0)
-	publish_targets := data.Get("publish_targets").([]interface{})
-	for _, x := range publish_targets {
-		casted := x.(map[string]string)
-		tags = append(tags, fmt.Sprintf("%s/%s:%s", casted["registry"], casted["name"], casted["tag"]))
-	}
-	return tags
-}
-
-func getCompiledOutputs(data *schema.ResourceData) []types.ImageBuildOutput {
-	outputs := make([]types.ImageBuildOutput, 0)
-	publish_targets := data.Get("publish_targets").([]interface{})
-	for _, x := range publish_targets {
-		casted := x.(map[string]string)
-		outputs = append(outputs, types.ImageBuildOutput{
-			Type: "image",
-			Attrs: map[string]string{
-				"name": fmt.Sprintf("%s/%s:%s", casted["registry"], casted["name"], casted["tag"]),
-				"push": "true",
-			},
-		})
-	}
-	return outputs
-}
-
 func getCompiledBuildArgs(data *schema.ResourceData) map[string]*string {
 	result := map[string]*string{}
 	x := "test"
 	result["test"] = &x
-	return result
-}
-
-func getCompiledAuthConfigs(meta interface{}) map[string]types.AuthConfig {
-	result := map[string]types.AuthConfig{}
-
 	return result
 }
 
@@ -231,14 +199,13 @@ func createImage(context context.Context, data *schema.ResourceData, meta interf
 	outputs := getCompiledOutputs(data)
 
 	options := types.ImageBuildOptions{
-		Tags:        tags,
-		Dockerfile:  dockerFilePath,
-		BuildArgs:   getCompiledBuildArgs(data),
-		AuthConfigs: getCompiledAuthConfigs(meta),
-		Context:     teedTarReader,
-		Labels:      getCompiledLabels(data),
-		Version:     types.BuilderBuildKit,
-		Outputs:     outputs,
+		Tags:       tags,
+		Dockerfile: dockerFilePath,
+		BuildArgs:  getCompiledBuildArgs(data),
+		Context:    teedTarReader,
+		Labels:     getCompiledLabels(data),
+		Version:    types.BuilderBuildKit,
+		Outputs:    outputs,
 	}
 
 	response, err := cli.ImageBuild(context, tarHandle, options)

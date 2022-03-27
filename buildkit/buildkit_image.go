@@ -6,13 +6,13 @@ import (
 
 func buildkitImageResource() *schema.Resource {
 	return &schema.Resource{
-		CreateContext: createImage,
+		CreateContext: createImage2,
 		ReadContext:   readImage,
 		UpdateContext: updateImage,
 		DeleteContext: deleteImage,
 		Description:   "A docker image built with buildkit and published to target registries.",
 		Schema: map[string]*schema.Schema{
-			"publish_targets": {
+			"publish_target": {
 				Type:     schema.TypeList,
 				Optional: true,
 				Elem: &schema.Resource{
@@ -41,6 +41,11 @@ func buildkitImageResource() *schema.Resource {
 				Optional: true,
 				Default:  "./Dockerfile",
 			},
+			"platform": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "local",
+			},
 			"labels": {
 				Type:     schema.TypeMap,
 				Default:  map[string]string{},
@@ -60,6 +65,13 @@ func buildkitImageResource() *schema.Resource {
 				Optional:  true,
 				Sensitive: true,
 			},
+			"secrets_base64": {
+				Type:      schema.TypeMap,
+				Default:   map[string]string{},
+				ForceNew:  true,
+				Optional:  true,
+				Sensitive: true,
+			},
 			"ssh_sockets": {
 				Type:     schema.TypeMap,
 				ForceNew: true,
@@ -72,7 +84,7 @@ func buildkitImageResource() *schema.Resource {
 				Type:        schema.TypeString,
 				ForceNew:    true,
 				Computed:    true,
-				Description: "The hash of the context directory contents except files which match a pattern contained in a .dockerignore file if present.",
+				Description: "The hash of the context, except files which match a pattern contained in a .dockerignore file (if present).",
 			},
 			"image_digest": {
 				Type:        schema.TypeString,
