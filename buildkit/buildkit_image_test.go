@@ -33,8 +33,9 @@ func TestAccImage_Basic(t *testing.T) {
 func step1() string {
 	return fmt.Sprintf(`
 		provider buildkit {
+			host = "tcp://127.0.0.1:1234"
 			registry_auth {
-				hostname = "https://docker.io"
+				hostname = "https://index.docker.io/v1/"
 				username = "%s"
 				password = "%s"
 			}
@@ -42,7 +43,7 @@ func step1() string {
 
 		resource buildkit_image this {
 			context = "../examples/basic"
-			dockerfile = "./Dockerfile"
+			dockerfile = "../examples/basic/Dockerfile"
 			publish_target {
 				registry = "https://docker.io"
 			    name = "rutledgepaulv/paul-test"
