@@ -1,0 +1,218 @@
+package buildkit
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"github.com/denisbrodbeck/machineid"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/session"
+	"github.com/moby/buildkit/session/secrets/secretsprovider"
+	"github.com/moby/buildkit/session/sshforward/sshprovider"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func getCompiledOutputs(data *schema.ResourceData) []client.ExportEntry {
+	outputs := make([]client.ExportEntry, 0)
+	publish_targets := data.Get("publish_target").([]interface{})
+	for _, x := range publish_targets {
+		casted := x.(map[string]interface{})
+		withoutProtocol := strings.ReplaceAll(casted["registry"].(string), "https://", "")
+		outputs = append(outputs, client.ExportEntry{
+			Type: "image",
+			Attrs: map[string]string{
+				"name": fmt.Sprintf("%s/%s:%s", withoutProtocol, casted["name"].(string), casted["tag"].(string)),
+				"push": "true",
+			},
+		})
+	}
+	return outputs
+}
+
+func getSecretsProvider(secrets map[string][]byte) session.Attachable {
+	return secretsprovider.FromMap(secrets)
+}
+
+func getPlatforms(data *schema.ResourceData) []string {
+	platforms := data.Get("platforms").([]interface{})
+	result := make([]string, len(platforms))
+	for i, x := range platforms {
+		result[i] = x.(string)
+	}
+	return result
+}
+
+func getSecrets(data *schema.ResourceData) (map[string][]byte, diag.Diagnostics) {
+	diagnostics := diag.Diagnostics{}
+	result := map[string][]byte{}
+	secrets := data.Get("secrets").(map[string]interface{})
+	secrets_base64 := data.Get("secrets_base64").(map[string]interface{})
+	for k, v := range secrets {
+		result[k] = []byte(v.(string))
+	}
+	for k, v := range secrets_base64 {
+		decoded, err := base64.StdEncoding.DecodeString(v.(string))
+		if err == nil {
+			result[k] = decoded
+		} else {
+			diagnostics = append(diagnostics, diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  "Failed to base64 decode a secret.",
+			})
+		}
+	}
+	return result, diagnostics
+}
+
+func getSSHAgents(data *schema.ResourceData) map[string]string {
+	result := map[string]string{}
+	if data.Get("forward_ssh_agent_socket").(bool) {
+		result["default"] = os.Getenv("SSH_AUTH_SOCK")
+		return result
+	} else {
+		return result
+	}
+}
+
+func getSSHProvider(ssh map[string]string) (session.Attachable, diag.Diagnostics) {
+	configs := make([]sshprovider.AgentConfig, 0)
+	for k, v := range ssh {
+		configs = append(configs, sshprovider.AgentConfig{
+			ID:    k,
+			Paths: strings.Split(v, ","),
+		})
+	}
+	sshProvider, err := sshprovider.NewSSHAgentProvider(configs)
+	if err != nil {
+		return nil, diag.Diagnostics{diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  err.Error(),
+		}}
+	}
+	return sshProvider, diag.Diagnostics{}
+}
+
+func merge(maps ...map[string]string) map[string]string {
+	result := map[string]string{}
+	for _, m := range maps {
+		for k, v := range m {
+			result[k] = v
+		}
+	}
+	return result
+}
+
+func getLabels(data *schema.ResourceData) map[string]string {
+	result := map[string]string{}
+	secrets := data.Get("labels").(map[string]interface{})
+	for k, v := range secrets {
+		result["label:"+k] = v.(string)
+	}
+	return result
+}
+
+func getBuildArgs(data *schema.ResourceData) map[string]string {
+	result := map[string]string{}
+	secrets := data.Get("args").(map[string]interface{})
+	for k, v := range secrets {
+		result["build-arg:"+k] = v.(string)
+	}
+	return result
+}
+
+func createImage2(ctx context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+
+	buildContext := data.Get("context").(string)
+	dockerfile := data.Get("dockerfile").(string)
+	provider := meta.(TerraformProviderBuildkit)
+	platforms := getPlatforms(data)
+	labels := getLabels(data)
+	args := getBuildArgs(data)
+	secrets, diags := getSecrets(data)
+	sshAgents := getSSHAgents(data)
+	outputs := getCompiledOutputs(data)
+
+	sessionProviders := make([]session.Attachable, 0)
+
+	if len(diags) > 0 {
+		return diags
+	}
+
+	dockerAuthProvider := NewDockerAuthProvider(provider.registry_auth)
+	secretsProvider := getSecretsProvider(secrets)
+	sshProvider, diags := getSSHProvider(sshAgents)
+
+	if len(diags) > 0 {
+		return diags
+	}
+
+	sessionProviders = append(sessionProviders, dockerAuthProvider, secretsProvider, sshProvider)
+
+	cli, err := client.New(context.Background(), provider.host, client.WithFailFast())
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer cli.Close()
+
+	sharedKey, err := machineid.ProtectedID("terraform-provider-buildkit")
+
+	if err != nil {
+		return diag.Diagnostics{
+			diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  err.Error(),
+			},
+		}
+	}
+
+	resp, err := cli.Solve(ctx, nil, client.SolveOpt{
+		Exports:  outputs,
+		Frontend: "dockerfile.v0",
+		FrontendAttrs: merge(labels, args, map[string]string{
+			"platform": strings.Join(platforms, ","),
+		}),
+		LocalDirs: map[string]string{
+			"context":    buildContext,
+			"dockerfile": filepath.Dir(dockerfile),
+		},
+		Session:   sessionProviders,
+		SharedKey: sharedKey,
+	}, nil)
+
+	if err != nil {
+		return diag.Diagnostics{diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  err.Error(),
+		}}
+	} else {
+		err := data.Set("image_digest", resp.ExporterResponse["containerimage.digest"])
+		if err != nil {
+
+		}
+	}
+
+	return diag.Diagnostics{}
+}
+
+func readImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	diagnostics := make(diag.Diagnostics, 0)
+
+	return diagnostics
+}
+
+func updateImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	diagnostics := make(diag.Diagnostics, 0)
+
+	return diagnostics
+}
+
+func deleteImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	diagnostics := make(diag.Diagnostics, 0)
+	return diagnostics
+}

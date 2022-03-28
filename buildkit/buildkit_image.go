@@ -38,13 +38,15 @@ func buildkitImageResource() *schema.Resource {
 			},
 			"dockerfile": {
 				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "./Dockerfile",
+				Required: true,
 			},
-			"platform": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Default:  "local",
+			"platforms": {
+				Type:     schema.TypeList,
+				Required: true,
+				MinItems: 1,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
 			},
 			"labels": {
 				Type:     schema.TypeMap,
@@ -72,13 +74,11 @@ func buildkitImageResource() *schema.Resource {
 				Optional:  true,
 				Sensitive: true,
 			},
-			"ssh_sockets": {
-				Type:     schema.TypeMap,
+			"forward_ssh_agent_socket": {
+				Type:     schema.TypeBool,
 				ForceNew: true,
 				Optional: true,
-				Default: map[string]string{
-					"default": "$SSH_AUTH_SOCK",
-				},
+				Default:  true,
 			},
 			"context_digest": {
 				Type:        schema.TypeString,
