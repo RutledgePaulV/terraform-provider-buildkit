@@ -124,7 +124,7 @@ func getBuildArgs(data *schema.ResourceData) map[string]string {
 	return result
 }
 
-func createImage2(ctx context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func createImage(ctx context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 
 	buildContext := data.Get("context").(string)
 	dockerfile := data.Get("dockerfile").(string)
@@ -214,5 +214,6 @@ func updateImage(context context.Context, data *schema.ResourceData, meta interf
 
 func deleteImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
+
 	return diagnostics
 }

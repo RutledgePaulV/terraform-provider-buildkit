@@ -6,7 +6,7 @@ import (
 
 func buildkitImageResource() *schema.Resource {
 	return &schema.Resource{
-		CreateContext: createImage2,
+		CreateContext: createImage,
 		ReadContext:   readImage,
 		UpdateContext: updateImage,
 		DeleteContext: deleteImage,
