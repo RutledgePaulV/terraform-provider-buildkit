@@ -78,7 +78,7 @@ func buildkitImageResource() *schema.Resource {
 				Type:     schema.TypeBool,
 				ForceNew: true,
 				Optional: true,
-				Default:  true,
+				Default:  false,
 			},
 			"context_digest": {
 				Type:        schema.TypeString,
@@ -88,6 +88,7 @@ func buildkitImageResource() *schema.Resource {
 			},
 			"image_digest": {
 				Type:        schema.TypeString,
+				ForceNew:    true,
 				Computed:    true,
 				Description: "The sha256 digest of the docker image. This is the canonical content addressable hash for a docker image.",
 			},

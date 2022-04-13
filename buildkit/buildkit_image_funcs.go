@@ -2,15 +2,20 @@ package buildkit
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"github.com/denisbrodbeck/machineid"
+	"github.com/docker/cli/cli/command/image/build"
+	"github.com/docker/docker/pkg/archive"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/moby/buildkit/client"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/secrets/secretsprovider"
 	"github.com/moby/buildkit/session/sshforward/sshprovider"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,6 +129,34 @@ func getBuildArgs(data *schema.ResourceData) map[string]string {
 	return result
 }
 
+func getDirectoryHash(directory string) (string, diag.Diagnostics) {
+	directory, _ = filepath.Abs(directory)
+	excludePatterns, err := build.ReadDockerignore(directory)
+	if err != nil {
+		return "", diag.Diagnostics{
+			diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  fmt.Sprintf("Could not open .dockerignore file in directory '%s'.", directory),
+				Detail:   err.Error(),
+			},
+		}
+	}
+	tarHandle, err := archive.TarWithOptions(directory, &archive.TarOptions{
+		ExcludePatterns: excludePatterns,
+	})
+	hash := sha256.New()
+	_, err = io.Copy(hash, tarHandle)
+	if err != nil {
+		return "", diag.Diagnostics{
+			diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  err.Error(),
+			},
+		}
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), diag.Diagnostics{}
+}
+
 func createImage(ctx context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 
 	buildContext := data.Get("context").(string)
@@ -133,15 +166,24 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 	labels := getLabels(data)
 	args := getBuildArgs(data)
 	secrets, diags := getSecrets(data)
-	sshAgents := getSSHAgents(data)
-	outputs := getCompiledOutputs(data)
-
-	sessionProviders := make([]session.Attachable, 0)
 
 	if len(diags) > 0 {
 		return diags
 	}
 
+	sshAgents := getSSHAgents(data)
+	outputs := getCompiledOutputs(data)
+	contextHash, diags := getDirectoryHash(buildContext)
+
+	if len(diags) > 0 {
+		return diags
+	}
+
+	data.SetId(contextHash)
+
+	_ = data.Set("context_digest", contextHash)
+
+	sessionProviders := make([]session.Attachable, 0)
 	dockerAuthProvider := NewDockerAuthProvider(provider.registry_auth)
 	secretsProvider := getSecretsProvider(secrets)
 	sshProvider, diags := getSSHProvider(sshAgents)
@@ -191,10 +233,7 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 			Summary:  err.Error(),
 		}}
 	} else {
-		err := data.Set("image_digest", resp.ExporterResponse["containerimage.digest"])
-		if err != nil {
-
-		}
+		_ = data.Set("image_digest", resp.ExporterResponse["containerimage.digest"])
 	}
 
 	return diag.Diagnostics{}

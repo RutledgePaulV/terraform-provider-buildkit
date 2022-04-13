@@ -23,8 +23,7 @@ func Provider() *schema.Provider {
 			"host": {
 				Type:        schema.TypeString,
 				Required:    true,
-				DefaultFunc: schema.EnvDefaultFunc("DOCKER_HOST", "unix:///var/run/docker.sock"),
-				Description: "The Docker daemon url",
+				Description: "URL for a running buildkit daemon.",
 			},
 			"registry_auth": {
 				Type:     schema.TypeList,
