@@ -9,6 +9,9 @@ import (
 	"github.com/denisbrodbeck/machineid"
 	"github.com/docker/cli/cli/command/image/build"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/moby/buildkit/client"
@@ -241,6 +244,57 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 
 func readImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
+	digest := data.Get("image_digest")
+	buildContext := data.Get("context").(string)
+	contextHash, diags := getDirectoryHash(buildContext)
+
+	if len(diags) > 0 {
+		return diags
+	} else {
+		data.SetId(contextHash)
+	}
+
+	provider := meta.(TerraformProviderBuildkit)
+	expected_targets := data.Get("publish_target").([]interface{})
+	actual_targets := make([]interface{}, 0)
+
+	diagnostics = make(diag.Diagnostics, 0)
+
+	for _, target := range expected_targets {
+		casted := target.(map[string]interface{})
+		hostname := casted["registry"].(string)
+		auth := provider.registry_auth[hostname]
+
+		hash, err := crane.Digest(casted["name"].(string)+":"+casted["tag"].(string), crane.WithAuth(&authn.Basic{
+			Username: auth.username,
+			Password: auth.password,
+		}))
+
+		if err != nil {
+			// an error is expected if it just doesn't exist on this registry yet at the expected tag
+			if te, ok := err.(*transport.Error); ok {
+				if te.StatusCode == 404 {
+					continue
+				}
+			}
+
+			diagnostics = append(diagnostics, diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  err.Error(),
+			})
+		}
+
+		if hash == digest {
+			actual_targets = append(actual_targets, target)
+		}
+	}
+
+	if len(diagnostics) > 0 {
+		return diagnostics
+	} else {
+		data.Set("publish_targets", actual_targets)
+		data.Set("context_hash", contextHash)
+	}
 
 	return diagnostics
 }

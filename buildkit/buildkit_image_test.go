@@ -83,7 +83,7 @@ func step1(folder string) string {
 		provider buildkit {
 			host = "tcp://127.0.0.1:1234"
 			registry_auth {
-				hostname = "https://index.docker.io/v1/"
+				hostname = "https://docker.io"
 				username = "%s"
 				password = "%s"
 			}

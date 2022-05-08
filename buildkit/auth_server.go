@@ -116,8 +116,11 @@ func (ap *authProvider) FetchToken(ctx context.Context, req *auth.FetchTokenRequ
 func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, error) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
+	if host == "https://index.docker.io/v1/" {
+		host = "https://docker.io"
+	}
 	if host == "registry-1.docker.io" {
-		host = "https://index.docker.io/v1/"
+		host = "https://docker.io"
 	}
 	ac, ok := ap.auth[host]
 	if !ok {
