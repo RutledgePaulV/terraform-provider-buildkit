@@ -21,24 +21,30 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 )
 
 func getCompiledOutputs(data *schema.ResourceData) []client.ExportEntry {
-	outputs := make([]client.ExportEntry, 0)
 	publish_targets := data.Get("publish_target").([]interface{})
-	for _, x := range publish_targets {
-		casted := x.(map[string]interface{})
-		withoutProtocol := strings.ReplaceAll(casted["registry"].(string), "https://", "")
-		outputs = append(outputs, client.ExportEntry{
+	if len(publish_targets) > 0 {
+		names := make([]string, 0)
+		for _, x := range publish_targets {
+			casted := x.(map[string]interface{})
+			withoutProtocol := strings.ReplaceAll(casted["registry"].(string), "https://", "")
+			completeRef := fmt.Sprintf("%s/%s:%s", withoutProtocol, casted["name"].(string), casted["tag"].(string))
+			names = append(names, completeRef)
+		}
+		return append(make([]client.ExportEntry, 0), client.ExportEntry{
 			Type: "image",
 			Attrs: map[string]string{
-				"name": fmt.Sprintf("%s/%s:%s", withoutProtocol, casted["name"].(string), casted["tag"].(string)),
+				"name": strings.Join(names, ","),
 				"push": "true",
 			},
 		})
+	} else {
+		return make([]client.ExportEntry, 0)
 	}
-	return outputs
 }
 
 func getSecretsProvider(secrets map[string][]byte) session.Attachable {
@@ -246,12 +252,16 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 	diagnostics := make(diag.Diagnostics, 0)
 	digest := data.Get("image_digest")
 	buildContext := data.Get("context").(string)
+	previousContextHash := data.Get("context_digest")
 	contextHash, diags := getDirectoryHash(buildContext)
 
 	if len(diags) > 0 {
 		return diags
-	} else {
+	}
+
+	if previousContextHash != contextHash {
 		data.SetId(contextHash)
+		data.Set("context_digest", contextHash)
 	}
 
 	provider := meta.(TerraformProviderBuildkit)
@@ -292,8 +302,9 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 	if len(diagnostics) > 0 {
 		return diagnostics
 	} else {
-		data.Set("publish_targets", actual_targets)
-		data.Set("context_hash", contextHash)
+		if !reflect.DeepEqual(expected_targets, actual_targets) {
+			data.Set("publish_target", actual_targets)
+		}
 	}
 
 	return diagnostics
