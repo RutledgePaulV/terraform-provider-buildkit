@@ -57,7 +57,6 @@ RUN --mount=type=secret,id=abra curl "https://abra:$(cat /run/secrets/abra_passw
 
 - **args** (Map of String) Arguments that should be made available to the image being built by Buildkit. Used to set values for ARG commands in the Dockerfile.
 - **forward_ssh_agent_socket** (Boolean) Should the host running Terraform make their ssh agent socket available to the image being built by Buildkit?
-- **id** (String) The ID of this resource.
 - **labels** (Map of String) Labels that should be added to the metadata f the image being built by Buildkit. Equivalent to LABEL commands in the Dockerfile.
 - **publish_target** (Block Set) Describes a coordinate where you want to publish the image after building. (see [below for nested schema](#nestedblock--publish_target))
 - **secrets** (Map of String, Sensitive) A map of secrets in key => value form that will be made accessible to the image being built by Buildkit.
@@ -66,6 +65,7 @@ RUN --mount=type=secret,id=abra curl "https://abra:$(cat /run/secrets/abra_passw
 ### Read-Only
 
 - **context_digest** (String) The hash of the context, except files which match a pattern contained in a .dockerignore file (if present).
+- **id** (String) The hash of the context, except files which match a pattern contained in a .dockerignore file (if present).
 - **image_digest** (String) The sha256 digest of the docker image. This is the canonical content addressable hash for a docker image.
 
 <a id="nestedblock--publish_target"></a>

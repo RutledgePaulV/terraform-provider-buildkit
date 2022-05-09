@@ -24,6 +24,103 @@ var PublishTargetResource = &schema.Resource{
 	},
 }
 
+var ImageResource = &schema.Resource{
+	Schema: map[string]*schema.Schema{
+		"registry_url": {
+			Type:        schema.TypeString,
+			Required:    true,
+			Description: "The registry url that the image came from.",
+		},
+		"name": {
+			Type:        schema.TypeString,
+			Required:    true,
+			Description: "The repository name of the image.",
+		},
+		"tag": {
+			Type:        schema.TypeString,
+			Required:    true,
+			Description: "The tag of the image.",
+		},
+		"url": {
+			Type:        schema.TypeString,
+			Required:    true,
+			Description: "The tag-based url for the image.",
+		},
+		"digest_url": {
+			Type:        schema.TypeString,
+			Required:    true,
+			Description: "The hash-based url for the image. You should prefer this when you need to point to the exact image.",
+		},
+		"labels": {
+			Type:        schema.TypeMap,
+			Default:     map[string]string{},
+			Description: "Labels that are set in the image metadata.",
+		},
+		"platforms": {
+			Type:     schema.TypeSet,
+			MinItems: 1,
+			Elem: &schema.Schema{
+				Type: schema.TypeString,
+			},
+			Description: "Platforms that are supported by this image.",
+		},
+		"size": {
+			Type:        schema.TypeInt,
+			Description: "The uncompressed size of the image, in bytes.",
+		},
+	},
+}
+
+func buildkitImagesDataSource() *schema.Resource {
+	return &schema.Resource{
+		Schema: map[string]*schema.Schema{
+			"most_recent_only": {
+				Type:        schema.TypeBool,
+				Default:     true,
+				Optional:    true,
+				Description: "Should all images be returned that match the criteria or only the most recent which matches?",
+			},
+			"images": {
+				Type:        schema.TypeList,
+				Computed:    true,
+				Elem:        ImageResource,
+				Description: "The image results of your query.",
+			},
+			"registry_url": {
+				Type:        schema.TypeString,
+				Required:    true,
+				Description: "The registry url you want to search.",
+			},
+			"repository_name": {
+				Type:        schema.TypeString,
+				Required:    true,
+				Description: "The repository name you want to search.",
+			},
+			"tag_pattern": {
+				Type:        schema.TypeString,
+				Default:     "/.*/",
+				Optional:    true,
+				Description: "A regex pattern you want to filter tags by.",
+			},
+			"labels": {
+				Type:        schema.TypeMap,
+				Default:     map[string]string{},
+				Optional:    true,
+				Description: "Required label keys / values to filter the returned images by.",
+			},
+			"supported_platforms": {
+				Type:     schema.TypeSet,
+				Required: true,
+				MinItems: 1,
+				Elem: &schema.Schema{
+					Type: schema.TypeString,
+				},
+				Description: "Required platforms that must be supported by the returned images.",
+			},
+		},
+	}
+}
+
 func buildkitImageResource() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: createImage,
