@@ -101,9 +101,9 @@ func TestAccImage_Ssh(t *testing.T) {
 func step1(folder string) string {
 	return fmt.Sprintf(`
 		provider buildkit {
-			host = "tcp://127.0.0.1:1234"
+			buildkit_url = "tcp://127.0.0.1:1234"
 			registry_auth {
-				hostname = "https://docker.io"
+				registry_url = "https://docker.io"
 				username = "%s"
 				password = "%s"
 			}
@@ -114,7 +114,7 @@ func step1(folder string) string {
 			dockerfile = "../examples/%s/Dockerfile"
 			platforms = ["linux/amd64", "linux/arm"]
 			publish_target {
-				registry = "https://docker.io"
+				registry_url = "https://docker.io"
 			    name = "rutledgepaulv/paul-test"
 				tag = "%s"
 			}
@@ -136,9 +136,9 @@ func step1(folder string) string {
 func addAPublishTarget(folder string) string {
 	return fmt.Sprintf(`
 		provider buildkit {
-			host = "tcp://127.0.0.1:1234"
+			buildkit_url = "tcp://127.0.0.1:1234"
 			registry_auth {
-				hostname = "https://docker.io"
+				registry_url = "https://docker.io"
 				username = "%s"
 				password = "%s"
 			}
@@ -149,12 +149,12 @@ func addAPublishTarget(folder string) string {
 			dockerfile = "../examples/%s/Dockerfile"
 			platforms = ["linux/amd64", "linux/arm"]
 			publish_target {
-				registry = "https://docker.io"
+				registry_url = "https://docker.io"
 			    name = "rutledgepaulv/paul-test"
 				tag = "%s"
 			}
 			publish_target {
-				registry = "https://docker.io"
+				registry_url = "https://docker.io"
 			    name = "rutledgepaulv/paul-test"
 				tag = "%s-diggity"
 			}

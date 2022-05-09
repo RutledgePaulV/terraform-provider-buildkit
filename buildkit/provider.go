@@ -7,30 +7,30 @@ import (
 )
 
 type RegistryAuth struct {
-	hostname string
-	username string
-	password string
+	registry_url string
+	username     string
+	password     string
 }
 
 type TerraformProviderBuildkit struct {
-	host          string
+	buildkit_url  string
 	registry_auth map[string]RegistryAuth
 }
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{
-			"host": {
+			"buildkit_url": {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "URL for a running buildkit daemon.",
 			},
 			"registry_auth": {
-				Type:     schema.TypeList,
+				Type:     schema.TypeSet,
 				Optional: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"hostname": {
+						"registry_url": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
@@ -55,23 +55,23 @@ func Provider() *schema.Provider {
 	}
 }
 
-func providerConfigure(context context.Context, schema *schema.ResourceData) (interface{}, diag.Diagnostics) {
-	registry_auth := schema.Get("registry_auth").([]interface{})
+func providerConfigure(context context.Context, data *schema.ResourceData) (interface{}, diag.Diagnostics) {
+	registry_auth := data.Get("registry_auth").(*schema.Set).List()
 
 	by_host := make(map[string]RegistryAuth)
 
 	for _, x := range registry_auth {
 		casted := x.(map[string]interface{})
-		by_host[casted["hostname"].(string)] = RegistryAuth{
-			hostname: casted["hostname"].(string),
-			username: casted["username"].(string),
-			password: casted["password"].(string),
+		by_host[casted["registry_url"].(string)] = RegistryAuth{
+			registry_url: casted["registry_url"].(string),
+			username:     casted["username"].(string),
+			password:     casted["password"].(string),
 		}
 	}
 
 	return TerraformProviderBuildkit{
 			registry_auth: by_host,
-			host:          schema.Get("host").(string),
+			buildkit_url:  data.Get("buildkit_url").(string),
 		},
 		make(diag.Diagnostics, 0)
 }

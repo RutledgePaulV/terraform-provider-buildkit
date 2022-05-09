@@ -31,7 +31,7 @@ func getCompiledOutputs(data *schema.ResourceData) []client.ExportEntry {
 		names := make([]string, 0)
 		for _, x := range publish_targets {
 			casted := x.(map[string]interface{})
-			withoutProtocol := strings.ReplaceAll(casted["registry"].(string), "https://", "")
+			withoutProtocol := strings.ReplaceAll(casted["registry_url"].(string), "https://", "")
 			completeRef := fmt.Sprintf("%s/%s:%s", withoutProtocol, casted["name"].(string), casted["tag"].(string))
 			names = append(names, completeRef)
 		}
@@ -203,7 +203,7 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 
 	sessionProviders = append(sessionProviders, dockerAuthProvider, secretsProvider, sshProvider)
 
-	cli, err := client.New(context.Background(), provider.host, client.WithFailFast())
+	cli, err := client.New(context.Background(), provider.buildkit_url, client.WithFailFast())
 
 	if err != nil {
 		panic(err)
@@ -272,7 +272,7 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 
 	for _, target := range expected_targets {
 		casted := target.(map[string]interface{})
-		hostname := casted["registry"].(string)
+		hostname := casted["registry_url"].(string)
 		auth := provider.registry_auth[hostname]
 
 		hash, err := crane.Digest(casted["name"].(string)+":"+casted["tag"].(string), crane.WithAuth(&authn.Basic{

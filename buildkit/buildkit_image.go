@@ -6,7 +6,7 @@ import (
 
 var PublishTargetResource = &schema.Resource{
 	Schema: map[string]*schema.Schema{
-		"registry": {
+		"registry_url": {
 			Type:     schema.TypeString,
 			Required: true,
 		},
