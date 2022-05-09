@@ -20,7 +20,6 @@ Now you just need to tell the provider about the daemon and configure any creden
 to the registries where you may want to publish the images you build.
 
 ```hcl
-
 provider buildkit {
     buildkit_url = "tcp://127.0.0.1:1234"
     registry_auth {
@@ -29,7 +28,6 @@ provider buildkit {
         password = "nicetry"
     }
 }
-
 ```
 
 
