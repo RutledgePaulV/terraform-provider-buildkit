@@ -4,6 +4,23 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
+var PublishTargetResource = &schema.Resource{
+	Schema: map[string]*schema.Schema{
+		"registry": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+		"name": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+		"tag": {
+			Type:     schema.TypeString,
+			Required: true,
+		},
+	},
+}
+
 func buildkitImageResource() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: createImage,
@@ -13,24 +30,9 @@ func buildkitImageResource() *schema.Resource {
 		Description:   "A docker image built with buildkit and published to target registries.",
 		Schema: map[string]*schema.Schema{
 			"publish_target": {
-				Type:     schema.TypeList,
+				Type:     schema.TypeSet,
 				Optional: true,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"registry": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"name": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-						"tag": {
-							Type:     schema.TypeString,
-							Required: true,
-						},
-					},
-				},
+				Elem:     PublishTargetResource,
 			},
 			"context": {
 				Type:     schema.TypeString,
@@ -41,8 +43,9 @@ func buildkitImageResource() *schema.Resource {
 				Required: true,
 			},
 			"platforms": {
-				Type:     schema.TypeList,
+				Type:     schema.TypeSet,
 				Required: true,
+				ForceNew: true,
 				MinItems: 1,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,

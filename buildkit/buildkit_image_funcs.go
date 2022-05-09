@@ -26,7 +26,7 @@ import (
 )
 
 func getCompiledOutputs(data *schema.ResourceData) []client.ExportEntry {
-	publish_targets := data.Get("publish_target").([]interface{})
+	publish_targets := data.Get("publish_target").(*schema.Set).List()
 	if len(publish_targets) > 0 {
 		names := make([]string, 0)
 		for _, x := range publish_targets {
@@ -52,7 +52,7 @@ func getSecretsProvider(secrets map[string][]byte) session.Attachable {
 }
 
 func getPlatforms(data *schema.ResourceData) []string {
-	platforms := data.Get("platforms").([]interface{})
+	platforms := data.Get("platforms").(*schema.Set).List()
 	result := make([]string, len(platforms))
 	for i, x := range platforms {
 		result[i] = x.(string)
@@ -265,7 +265,7 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 	}
 
 	provider := meta.(TerraformProviderBuildkit)
-	expected_targets := data.Get("publish_target").([]interface{})
+	expected_targets := data.Get("publish_target").(*schema.Set).List()
 	actual_targets := make([]interface{}, 0)
 
 	diagnostics = make(diag.Diagnostics, 0)
@@ -303,7 +303,9 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 		return diagnostics
 	} else {
 		if !reflect.DeepEqual(expected_targets, actual_targets) {
-			data.Set("publish_target", actual_targets)
+			fun := schema.HashResource(PublishTargetResource)
+			asSet := schema.NewSet(fun, actual_targets)
+			data.Set("publish_target", asSet)
 		}
 	}
 
@@ -311,9 +313,24 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 }
 
 func updateImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
-	diagnostics := make(diag.Diagnostics, 0)
 
-	return diagnostics
+	changeKeys := []string{
+		"secrets",
+		"labels",
+		"args",
+		"platforms",
+		"publish_target",
+		"context_digest",
+		"secrets_base64",
+	}
+
+	for _, k := range changeKeys {
+		if data.HasChange(k) {
+			return createImage(context, data, meta)
+		}
+	}
+
+	return diag.Diagnostics{}
 }
 
 func deleteImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
