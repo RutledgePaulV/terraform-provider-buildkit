@@ -31,17 +31,20 @@ func Provider() *schema.Provider {
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"registry_url": {
-							Type:     schema.TypeString,
-							Required: true,
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: "The base url of the registry you want to support communicating with.",
 						},
 						"username": {
-							Type:     schema.TypeString,
-							Required: true,
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: "The username you want to use to authenticate to the registry.",
 						},
 						"password": {
-							Type:      schema.TypeString,
-							Sensitive: true,
-							Required:  true,
+							Type:        schema.TypeString,
+							Sensitive:   true,
+							Required:    true,
+							Description: "The password for authenticating to the registry as `username`.",
 						},
 					},
 				},

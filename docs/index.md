@@ -8,7 +8,29 @@ description: |-
 
 # buildkit Provider
 
+To use this provider you need to have a buildkit daemon running somewhere that is accessible
+by the machine executing Terraform. An easy way to get started is to launch the buildkit daemon as
+a container using a command like this:
 
+```bash
+docker run -d --name buildkitd --privileged -p 1234:1234 moby/buildkit:latest --addr tcp://0.0.0.0:1234 --debug
+```
+
+Now you just need to tell the provider about the daemon and configure any credentials necessary to authenticate
+to the registries where you may want to publish the images you build.
+
+```hcl
+
+provider buildkit {
+    buildkit_url = "tcp://127.0.0.1:1234"
+    registry_auth {
+        registry_url = "https://docker.io"
+        username = "rutledgepaulv"
+        password = "nicetry"
+    }
+}
+
+```
 
 
 
@@ -28,6 +50,6 @@ description: |-
 
 Required:
 
-- **password** (String, Sensitive)
-- **registry_url** (String)
-- **username** (String)
+- **password** (String, Sensitive) The password for authenticating to the registry as `username`.
+- **registry_url** (String) The base url of the registry you want to support communicating with.
+- **username** (String) The username you want to use to authenticate to the registry.
