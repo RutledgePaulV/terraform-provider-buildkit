@@ -8,6 +8,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"io/ioutil"
 	"regexp"
@@ -162,12 +163,7 @@ func listImages(repository string, auth RegistryAuth, filters ImageFilters) ([]I
 								continue
 							}
 
-							labels_as_interface := imageConfig["config"].(map[string]interface{})["Labels"].(map[string]interface{})
-
-							labels := map[string]string{}
-							for k, v := range labels_as_interface {
-								labels[k] = v.(string)
-							}
+							labels := extractLabels(imageConfig)
 
 							matches := true
 
@@ -191,6 +187,120 @@ func listImages(repository string, auth RegistryAuth, filters ImageFilters) ([]I
 
 				} else if tagDescriptor.MediaType.IsImage() {
 
+					imageManifestReader := bytes.NewReader(tagDescriptor.Manifest)
+					parsedImageManifest, err := v1.ParseManifest(imageManifestReader)
+					if err != nil {
+						diagnostics = append(diagnostics, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  err.Error(),
+						})
+						continue
+					}
+
+					imageConfigManifestReference := tagReference.Context().Digest(parsedImageManifest.Config.Digest.String())
+
+					if err != nil {
+						diagnostics = append(diagnostics, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  err.Error(),
+						})
+						continue
+					}
+
+					imageConfigLayer, err := remote.Layer(imageConfigManifestReference, options.Remote...)
+
+					if err != nil {
+						diagnostics = append(diagnostics, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  err.Error(),
+						})
+						continue
+					}
+
+					imageConfigLayerReader, err := imageConfigLayer.Uncompressed()
+					if err != nil {
+						diagnostics = append(diagnostics, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  err.Error(),
+						})
+						continue
+					}
+
+					imageConfig := map[string]interface{}{}
+
+					bites, err := ioutil.ReadAll(imageConfigLayerReader)
+
+					if err != nil {
+						diagnostics = append(diagnostics, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  err.Error(),
+						})
+						continue
+					}
+
+					err = json.Unmarshal(bites, &imageConfig)
+
+					if err != nil {
+						diagnostics = append(diagnostics, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  err.Error(),
+						})
+						continue
+					}
+
+					labels := extractLabels(imageConfig)
+
+					labelsMatch := true
+
+					for k, v := range filters.labels {
+						if v != labels[k] {
+							labelsMatch = false
+							break
+						}
+					}
+
+					platformAsString := imageConfig["os"].(string) + "/" + imageConfig["architecture"].(string)
+					if contains(filters.supported_platforms, platformAsString) {
+						if labelsMatch {
+							result = append(result, ImageDescriptor{
+								tag:       tag,
+								labels:    labels,
+								digest:    tagDescriptor.Digest.String(),
+								platforms: []string{platformAsString},
+							})
+						}
+					}
+
+				} else if tagDescriptor.MediaType == types.DockerManifestSchema1Signed {
+					imageManifest := SchemaV1{}
+					err = json.Unmarshal(tagDescriptor.Manifest, &imageManifest)
+					lastLayer := imageManifest.History[0].V1Compatibility
+					layerManifest := SchemaV1History{}
+					err = json.Unmarshal([]byte(lastLayer), &layerManifest)
+					platformAsString := layerManifest.Os + "/" + layerManifest.Architecture
+					if contains(filters.supported_platforms, platformAsString) {
+						labels := layerManifest.Config.Labels
+						if labels == nil {
+							labels = map[string]string{}
+						}
+						matches := true
+
+						for k, v := range filters.labels {
+							if v != labels[k] {
+								matches = false
+								break
+							}
+						}
+
+						if matches {
+							result = append(result, ImageDescriptor{
+								tag:       tag,
+								labels:    labels,
+								digest:    tagDescriptor.Digest.String(),
+								platforms: []string{platformAsString},
+							})
+						}
+					}
 				} else {
 					diagnostics = append(diagnostics, diag.Diagnostic{
 						Severity: diag.Error,
@@ -203,6 +313,34 @@ func listImages(repository string, auth RegistryAuth, filters ImageFilters) ([]I
 	}
 
 	return result, diagnostics
+}
+
+func extractLabels(config map[string]interface{}) map[string]string {
+	labels := map[string]string{}
+
+	if config == nil {
+		return labels
+	} else {
+		if nestedConfig, ok := config["config"]; ok {
+			if nestedConfig == nil {
+				return labels
+			} else {
+				nested := nestedConfig.(map[string]interface{})
+				if y, ok := nested["labels"]; ok {
+					if y == nil {
+						return labels
+					} else {
+						yy := y.(map[string]interface{})
+						for k, v := range yy {
+							labels[k] = v.(string)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return labels
 }
 
 func platformToString(platform *v1.Platform) string {

@@ -98,7 +98,7 @@ func TestAccImage_Ssh(t *testing.T) {
 	})
 }
 
-func TestAccImages_Basic(t *testing.T) {
+func TestAccImages_v2Index(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: map[string]func() (*schema.Provider, error){
 			"buildkit": func() (*schema.Provider, error) {
@@ -107,14 +107,46 @@ func TestAccImages_Basic(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: dataSource(),
+				Config: dataSource_v2Index(),
 				Check:  resource.ComposeTestCheckFunc(),
 			},
 		},
 	})
 }
 
-func dataSource() string {
+func TestAccImages_v2Manifest(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProviderFactories: map[string]func() (*schema.Provider, error){
+			"buildkit": func() (*schema.Provider, error) {
+				return Provider(), nil
+			},
+		},
+		Steps: []resource.TestStep{
+			{
+				Config: dataSource_v2Manifest(),
+				Check:  resource.ComposeTestCheckFunc(),
+			},
+		},
+	})
+}
+
+func TestAccImages_v1Manifest(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProviderFactories: map[string]func() (*schema.Provider, error){
+			"buildkit": func() (*schema.Provider, error) {
+				return Provider(), nil
+			},
+		},
+		Steps: []resource.TestStep{
+			{
+				Config: dataSource_v1Manifest(),
+				Check:  resource.ComposeTestCheckFunc(),
+			},
+		},
+	})
+}
+
+func dataSource_v2Index() string {
 	return fmt.Sprintf(`
 		provider buildkit {
 			buildkit_url = "tcp://127.0.0.1:1234"
@@ -128,6 +160,48 @@ func dataSource() string {
 		data buildkit_images this {
 			registry_url = "https://docker.io"
 			repository_name = "rutledgepaulv/paul-test"
+			supported_platforms = ["linux/amd64"]
+		}
+	`,
+		os.Getenv("DOCKER_USERNAME"),
+		os.Getenv("DOCKER_TOKEN"))
+}
+
+func dataSource_v2Manifest() string {
+	return fmt.Sprintf(`
+		provider buildkit {
+			buildkit_url = "tcp://127.0.0.1:1234"
+			registry_auth {
+				registry_url = "https://docker.io"
+				username = "%s"
+				password = "%s"
+			}
+		}
+
+		data buildkit_images this {
+			registry_url = "https://docker.io"
+			repository_name = "rutledgepaulv/ansilove"
+			supported_platforms = ["linux/amd64"]
+		}
+	`,
+		os.Getenv("DOCKER_USERNAME"),
+		os.Getenv("DOCKER_TOKEN"))
+}
+
+func dataSource_v1Manifest() string {
+	return fmt.Sprintf(`
+		provider buildkit {
+			buildkit_url = "tcp://127.0.0.1:1234"
+			registry_auth {
+				registry_url = "https://docker.io"
+				username = "%s"
+				password = "%s"
+			}
+		}
+
+		data buildkit_images this {
+			registry_url = "https://docker.io"
+			repository_name = "rutledgepaulv/sbt"
 			supported_platforms = ["linux/amd64"]
 		}
 	`,
