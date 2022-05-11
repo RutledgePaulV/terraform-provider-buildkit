@@ -28,37 +28,37 @@ var ImageResource = &schema.Resource{
 	Schema: map[string]*schema.Schema{
 		"registry_url": {
 			Type:        schema.TypeString,
-			Required:    true,
+			Computed:    true,
 			Description: "The registry url that the image came from.",
 		},
 		"name": {
 			Type:        schema.TypeString,
-			Required:    true,
+			Computed:    true,
 			Description: "The repository name of the image.",
 		},
 		"tag": {
 			Type:        schema.TypeString,
-			Required:    true,
+			Computed:    true,
 			Description: "The tag of the image.",
 		},
 		"url": {
 			Type:        schema.TypeString,
-			Required:    true,
+			Computed:    true,
 			Description: "The tag-based url for the image.",
 		},
 		"digest_url": {
 			Type:        schema.TypeString,
-			Required:    true,
+			Computed:    true,
 			Description: "The hash-based url for the image. You should prefer this when you need to point to the exact image.",
 		},
 		"labels": {
 			Type:        schema.TypeMap,
-			Default:     map[string]string{},
+			Computed:    true,
 			Description: "Labels that are set in the image metadata.",
 		},
 		"platforms": {
 			Type:     schema.TypeSet,
-			MinItems: 1,
+			Computed: true,
 			Elem: &schema.Schema{
 				Type: schema.TypeString,
 			},
@@ -66,6 +66,7 @@ var ImageResource = &schema.Resource{
 		},
 		"size": {
 			Type:        schema.TypeInt,
+			Computed:    true,
 			Description: "The uncompressed size of the image, in bytes.",
 		},
 	},
@@ -73,6 +74,7 @@ var ImageResource = &schema.Resource{
 
 func buildkitImagesDataSource() *schema.Resource {
 	return &schema.Resource{
+		ReadContext: readImagesDataSource,
 		Schema: map[string]*schema.Schema{
 			"most_recent_only": {
 				Type:        schema.TypeBool,

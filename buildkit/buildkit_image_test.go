@@ -98,6 +98,43 @@ func TestAccImage_Ssh(t *testing.T) {
 	})
 }
 
+func TestAccImages_Basic(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		ProviderFactories: map[string]func() (*schema.Provider, error){
+			"buildkit": func() (*schema.Provider, error) {
+				return Provider(), nil
+			},
+		},
+		Steps: []resource.TestStep{
+			{
+				Config: dataSource(),
+				Check:  resource.ComposeTestCheckFunc(),
+			},
+		},
+	})
+}
+
+func dataSource() string {
+	return fmt.Sprintf(`
+		provider buildkit {
+			buildkit_url = "tcp://127.0.0.1:1234"
+			registry_auth {
+				registry_url = "https://docker.io"
+				username = "%s"
+				password = "%s"
+			}
+		}
+
+		data buildkit_images this {
+			registry_url = "https://docker.io"
+			repository_name = "rutledgepaulv/paul-test"
+			supported_platforms = ["linux/amd64"]
+		}
+	`,
+		os.Getenv("DOCKER_USERNAME"),
+		os.Getenv("DOCKER_TOKEN"))
+}
+
 func step1(folder string) string {
 	return fmt.Sprintf(`
 		provider buildkit {

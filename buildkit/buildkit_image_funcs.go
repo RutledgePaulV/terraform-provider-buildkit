@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
@@ -337,4 +338,60 @@ func deleteImage(context context.Context, data *schema.ResourceData, meta interf
 	diagnostics := make(diag.Diagnostics, 0)
 
 	return diagnostics
+}
+
+func readImagesDataSource(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+
+	labels_as_interface := data.Get("labels").(map[string]interface{})
+	supported_platforms_as_interface := data.Get("supported_platforms").(*schema.Set).List()
+
+	labels := map[string]string{}
+	for k, v := range labels_as_interface {
+		labels[k] = v.(string)
+	}
+
+	supported_platforms := []string{}
+	for _, x := range supported_platforms_as_interface {
+		supported_platforms = append(supported_platforms, x.(string))
+	}
+
+	most_recent_only := data.Get("most_recent_only").(bool)
+
+	registry_url := data.Get("registry_url").(string)
+	repository_name := data.Get("repository_name").(string)
+	tag_pattern := data.Get("tag_pattern").(string)
+	provider := meta.(TerraformProviderBuildkit)
+	auth := provider.registry_auth[registry_url]
+
+	results, diagnostics := listImages(strings.TrimPrefix(registry_url, "https://")+"/"+repository_name, auth, ImageFilters{
+		tag_pattern:         tag_pattern,
+		most_recent_only:    most_recent_only,
+		labels:              labels,
+		supported_platforms: supported_platforms,
+	})
+
+	data.Set("images", results)
+
+	return diagnostics
+}
+
+func contains(xs []string, y string) bool {
+	for _, x := range xs {
+		if x == y {
+			return true
+		}
+	}
+	return false
+}
+
+func makeOptions(opts ...crane.Option) crane.Options {
+	opt := crane.Options{
+		Remote: []remote.Option{
+			remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		},
+	}
+	for _, o := range opts {
+		o(&opt)
+	}
+	return opt
 }
