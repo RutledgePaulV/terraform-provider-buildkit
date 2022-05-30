@@ -33,7 +33,7 @@ func getCompiledOutputs(data *schema.ResourceData) []client.ExportEntry {
 		for _, x := range publish_targets {
 			casted := x.(map[string]interface{})
 			registry := casted["registry_url"].(string)
-			completeRef := fullImage(registry, casted["name"].(string)+casted["tag"].(string))
+			completeRef := fullImage(registry, casted["name"].(string)+":"+casted["tag"].(string))
 			names = append(names, completeRef)
 		}
 		return append(make([]client.ExportEntry, 0), client.ExportEntry{
