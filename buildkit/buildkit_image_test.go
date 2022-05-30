@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"os"
 	"testing"
 )
@@ -24,7 +25,7 @@ func TestAccImage_Basic(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: step1("basic"),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -40,11 +41,11 @@ func TestAccImage_BasicAddAPublishTarget(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: step1("basic"),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 			{
 				Config: addAPublishTarget("basic"),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -60,7 +61,7 @@ func TestAccImage_Ignore(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: step1("ignore"),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -76,7 +77,7 @@ func TestAccImage_Secrets(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: step1("secrets"),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -92,7 +93,7 @@ func TestAccImage_Ssh(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: step1("ssh"),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -108,10 +109,15 @@ func TestAccImages_v2Index(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: dataSource_v2Index(),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
+}
+
+func printState(state *terraform.State) error {
+	println(state.String())
+	return nil
 }
 
 func TestAccImages_v2Manifest(t *testing.T) {
@@ -124,7 +130,7 @@ func TestAccImages_v2Manifest(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: dataSource_v2Manifest(),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -140,7 +146,7 @@ func TestAccImages_v1Manifest(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: dataSource_v1Manifest(),
-				Check:  resource.ComposeTestCheckFunc(),
+				Check:  resource.ComposeTestCheckFunc(printState),
 			},
 		},
 	})
@@ -224,6 +230,7 @@ func step1(folder string) string {
 			context = "../examples/%s"
 			dockerfile = "../examples/%s/Dockerfile"
 			platforms = ["linux/amd64", "linux/arm"]
+			forward_ssh_agent_socket = true
 			publish_target {
 				registry_url = "https://docker.io"
 			    name = "rutledgepaulv/paul-test"

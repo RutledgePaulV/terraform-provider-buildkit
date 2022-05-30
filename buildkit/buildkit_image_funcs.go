@@ -11,8 +11,8 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/crane"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/moby/buildkit/client"
@@ -32,8 +32,8 @@ func getCompiledOutputs(data *schema.ResourceData) []client.ExportEntry {
 		names := make([]string, 0)
 		for _, x := range publish_targets {
 			casted := x.(map[string]interface{})
-			withoutProtocol := strings.ReplaceAll(casted["registry_url"].(string), "https://", "")
-			completeRef := fmt.Sprintf("%s/%s:%s", withoutProtocol, casted["name"].(string), casted["tag"].(string))
+			registry := casted["registry_url"].(string)
+			completeRef := fullImage(registry, casted["name"].(string)+casted["tag"].(string))
 			names = append(names, completeRef)
 		}
 		return append(make([]client.ExportEntry, 0), client.ExportEntry{
@@ -111,8 +111,8 @@ func getSSHProvider(ssh map[string]string) (session.Attachable, diag.Diagnostics
 	return sshProvider, diag.Diagnostics{}
 }
 
-func merge(maps ...map[string]string) map[string]string {
-	result := map[string]string{}
+func merge[K comparable, V interface{}](maps ...map[K]V) map[K]V {
+	result := map[K]V{}
 	for _, m := range maps {
 		for k, v := range m {
 			result[k] = v
@@ -244,6 +244,35 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 		}}
 	} else {
 		_ = data.Set("image_digest", resp.ExporterResponse["containerimage.digest"])
+		publish_targets := data.Get("publish_target").(*schema.Set).List()
+		new_targets := []interface{}{}
+
+		diags := diag.Diagnostics{}
+		for _, x := range publish_targets {
+			casted := x.(map[string]interface{})
+			new_target := merge(map[string]interface{}{}, casted)
+			registry := casted["registry_url"].(string)
+			completeRef := fullImage(registry, casted["name"].(string)+":"+casted["tag"].(string))
+			hash, err := getRemoteImageHash(completeRef, provider.registry_auth[registry])
+			if err != nil {
+				diags = append(diags, diag.Diagnostic{
+					Severity: diag.Error,
+					Summary:  err.Error(),
+				})
+			}
+			new_target["tag_url"] = completeRef
+			new_target["digest_url"] = fullImage(registry, casted["name"].(string)+"@"+hash)
+
+			new_targets = append(new_targets, new_target)
+		}
+
+		if len(diags) > 0 {
+			return diags
+		}
+
+		fun := schema.HashResource(PublishTargetResource)
+		asSet := schema.NewSet(fun, new_targets)
+		data.Set("publish_target", asSet)
 	}
 
 	return diag.Diagnostics{}
@@ -251,7 +280,6 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 
 func readImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
-	digest := data.Get("image_digest")
 	buildContext := data.Get("context").(string)
 	previousContextHash := data.Get("context_digest")
 	contextHash, diags := getDirectoryHash(buildContext)
@@ -276,10 +304,8 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 		hostname := casted["registry_url"].(string)
 		auth := provider.registry_auth[hostname]
 
-		hash, err := crane.Digest(casted["name"].(string)+":"+casted["tag"].(string), crane.WithAuth(&authn.Basic{
-			Username: auth.username,
-			Password: auth.password,
-		}))
+		qualified := fullImage(hostname, casted["name"].(string)+":"+casted["tag"].(string))
+		hash, err := getRemoteImageHash(qualified, auth)
 
 		if err != nil {
 			// an error is expected if it just doesn't exist on this registry yet at the expected tag
@@ -295,9 +321,8 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 			})
 		}
 
-		if hash == digest {
-			actual_targets = append(actual_targets, target)
-		}
+		casted["digest_url"] = hash
+		actual_targets = append(actual_targets, target)
 	}
 
 	if len(diagnostics) > 0 {
@@ -311,6 +336,13 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 	}
 
 	return diagnostics
+}
+
+func getRemoteImageHash(qualified string, auth RegistryAuth) (string, error) {
+	return crane.Digest(qualified, crane.WithAuth(&authn.Basic{
+		Username: auth.username,
+		Password: auth.password,
+	}))
 }
 
 func updateImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
@@ -340,6 +372,10 @@ func deleteImage(context context.Context, data *schema.ResourceData, meta interf
 	return diagnostics
 }
 
+func fullImage(registry string, repository string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(registry, "https://"), "http://") + "/" + repository
+}
+
 func readImagesDataSource(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 
 	labels_as_interface := data.Get("labels").(map[string]interface{})
@@ -363,35 +399,54 @@ func readImagesDataSource(context context.Context, data *schema.ResourceData, me
 	provider := meta.(TerraformProviderBuildkit)
 	auth := provider.registry_auth[registry_url]
 
-	results, diagnostics := listImages(strings.TrimPrefix(registry_url, "https://")+"/"+repository_name, auth, ImageFilters{
-		tag_pattern:         tag_pattern,
-		most_recent_only:    most_recent_only,
-		labels:              labels,
-		supported_platforms: supported_platforms,
+	repo := fullImage(registry_url, repository_name)
+
+	results, err := query(context, auth, ImageQuery{
+		Name:       repo,
+		TagPattern: tag_pattern,
+		Labels:     labels,
+		Platforms:  supported_platforms,
 	})
 
-	data.Set("images", results)
+	if err != nil {
+		return diag.Diagnostics{diag.Diagnostic{
+			Severity: diag.Error,
+			Summary:  err.Error(),
+		}}
+	}
 
-	return diagnostics
-}
-
-func contains(xs []string, y string) bool {
-	for _, x := range xs {
-		if x == y {
-			return true
+	if most_recent_only {
+		if len(results) > 1 {
+			results = results[:1]
 		}
 	}
-	return false
+
+	id, _ := uuid.GenerateUUID()
+
+	data.SetId(id)
+	asMaps := descriptorsToMaps(results)
+	data.Set("images", asMaps)
+
+	return diag.Diagnostics{}
 }
 
-func makeOptions(opts ...crane.Option) crane.Options {
-	opt := crane.Options{
-		Remote: []remote.Option{
-			remote.WithAuthFromKeychain(authn.DefaultKeychain),
-		},
+func descriptorsToMaps(data []ImageResult) []map[string]interface{} {
+	results := make([]map[string]interface{}, 0)
+	for _, x := range data {
+		labels := map[string]interface{}{}
+		for k, v := range x.Labels {
+			labels[k] = v
+		}
+
+		result := map[string]interface{}{
+			"name":       x.Name,
+			"tag":        x.Tag,
+			"tag_url":    x.TagUrl,
+			"digest_url": x.DigestUrl,
+			"labels":     labels,
+			"platform":   x.Platform,
+		}
+		results = append(results, result)
 	}
-	for _, o := range opts {
-		o(&opt)
-	}
-	return opt
+	return results
 }

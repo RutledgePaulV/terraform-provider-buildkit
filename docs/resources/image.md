@@ -77,4 +77,9 @@ Required:
 - **registry_url** (String) The base url of the registry you want to publish to.
 - **tag** (String) The tag you want to publish this particular build as.
 
+Read-Only:
+
+- **digest_url** (String) The tag you want to publish this particular build as.
+- **tag_url** (String) The tag you want to publish this particular build as.
+
 

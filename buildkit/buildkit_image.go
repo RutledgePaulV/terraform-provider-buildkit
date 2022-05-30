@@ -21,16 +21,23 @@ var PublishTargetResource = &schema.Resource{
 			Required:    true,
 			Description: "The tag you want to publish this particular build as.",
 		},
+		"tag_url": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			ForceNew:    true,
+			Description: "The tag you want to publish this particular build as.",
+		},
+		"digest_url": {
+			Type:        schema.TypeString,
+			Computed:    true,
+			ForceNew:    true,
+			Description: "The tag you want to publish this particular build as.",
+		},
 	},
 }
 
 var ImageResource = &schema.Resource{
 	Schema: map[string]*schema.Schema{
-		"registry_url": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "The registry url that the image came from.",
-		},
 		"name": {
 			Type:        schema.TypeString,
 			Computed:    true,
@@ -41,7 +48,7 @@ var ImageResource = &schema.Resource{
 			Computed:    true,
 			Description: "The tag of the image.",
 		},
-		"url": {
+		"tag_url": {
 			Type:        schema.TypeString,
 			Computed:    true,
 			Description: "The tag-based url for the image.",
@@ -53,21 +60,14 @@ var ImageResource = &schema.Resource{
 		},
 		"labels": {
 			Type:        schema.TypeMap,
+			Elem:        schema.TypeString,
 			Computed:    true,
 			Description: "Labels that are set in the image metadata.",
 		},
-		"platforms": {
-			Type:     schema.TypeSet,
-			Computed: true,
-			Elem: &schema.Schema{
-				Type: schema.TypeString,
-			},
-			Description: "Platforms that are supported by this image.",
-		},
-		"size": {
-			Type:        schema.TypeInt,
+		"platform": {
+			Type:        schema.TypeString,
 			Computed:    true,
-			Description: "The uncompressed size of the image, in bytes.",
+			Description: "Platform that is supported by this image.",
 		},
 	},
 }

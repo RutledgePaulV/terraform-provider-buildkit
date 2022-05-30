@@ -2,6 +2,62 @@ package buildkit
 
 import "time"
 
+type Labels map[string]string
+
+type ImageResult struct {
+	Name           string
+	Registry       string
+	Tag            string
+	Labels         Labels
+	TagUrl         string
+	DigestUrl      string
+	ImageDigest    string
+	Platform       string
+	BuildTimestamp time.Time
+}
+
+type ImageQuery struct {
+	Name       string
+	TagPattern string
+	Labels     Labels
+	Platforms  []string
+}
+
+type RegistrationAuthentication struct {
+	BaseUrl  string
+	Username string
+	Password string
+}
+
+type Platform struct {
+	OperatingSystem string
+	Architecture    string
+}
+
+type ImageConfigManifest struct {
+	Architecture string `json:"architecture"`
+	Config       struct {
+		Env     []string          `json:"Env"`
+		Cmd     []string          `json:"Cmd"`
+		Labels  map[string]string `json:"Labels"`
+		OnBuild interface{}       `json:"OnBuild"`
+	} `json:"config"`
+	Created time.Time `json:"created"`
+	History []struct {
+		Created    time.Time `json:"created"`
+		CreatedBy  string    `json:"created_by"`
+		EmptyLayer bool      `json:"empty_layer,omitempty"`
+		Comment    string    `json:"comment,omitempty"`
+	} `json:"history"`
+	MobyBuildkitBuildinfoV1 string `json:"moby.buildkit.buildinfo.v1"`
+	Os                      string `json:"os"`
+	Rootfs                  struct {
+		Type    string   `json:"type"`
+		DiffIds []string `json:"diff_ids"`
+	} `json:"rootfs"`
+	Variant string `json:"variant"`
+}
+
 type SchemaV1History struct {
 	ID              string    `json:"id"`
 	Parent          string    `json:"parent"`
