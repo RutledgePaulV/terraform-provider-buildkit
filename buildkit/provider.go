@@ -53,7 +53,9 @@ func Provider() *schema.Provider {
 		ResourcesMap: map[string]*schema.Resource{
 			"buildkit_image": buildkitImageResource(),
 		},
-		DataSourcesMap:       map[string]*schema.Resource{},
+		DataSourcesMap: map[string]*schema.Resource{
+			"buildkit_images": buildkitImagesDataSource(),
+		},
 		ConfigureContextFunc: providerConfigure,
 	}
 }
