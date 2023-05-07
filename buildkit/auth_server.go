@@ -122,13 +122,12 @@ func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, err
 	if host == "registry-1.docker.io" {
 		host = "https://docker.io"
 	}
-	ac, ok := ap.auth[host]
-	if !ok {
-		return nil, errors.New("registry auth not found for " + host)
-	}
 	res := &auth.CredentialsResponse{}
-	res.Username = ac.username
-	res.Secret = ac.password
+	ac, ok := ap.auth[host]
+	if ok {
+		res.Username = ac.username
+		res.Secret = ac.password
+	}
 	return res, nil
 }
 
