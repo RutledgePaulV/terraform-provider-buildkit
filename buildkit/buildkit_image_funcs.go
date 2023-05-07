@@ -290,7 +290,7 @@ func readImage(context context.Context, data *schema.ResourceData, meta interfac
 
 	if previousContextHash != contextHash {
 		data.SetId(contextHash)
-		data.Set("context_digest", contextHash)
+		_ = data.Set("context_digest", contextHash)
 	}
 
 	provider := meta.(TerraformProviderBuildkit)

@@ -1,3 +1,7 @@
 .idea/
 *.iml
 .DS_Store
+*.lock.hcl
+*.tfstate
+terraform-provider-buildkit
+.terraform
