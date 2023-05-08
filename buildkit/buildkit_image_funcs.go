@@ -183,15 +183,14 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 
 	sshAgents := getSSHAgents(data)
 	outputs := getCompiledOutputs(data)
-	contextHash, diags := getDirectoryHash(buildContext)
 
 	if len(diags) > 0 {
 		return diags
 	}
 
-	data.SetId(contextHash)
+	id, _ := uuid.GenerateUUID()
 
-	_ = data.Set("context_digest", contextHash)
+	data.SetId(id)
 
 	sessionProviders := make([]session.Attachable, 0)
 	dockerAuthProvider := NewDockerAuthProvider(provider.registry_auth)
@@ -280,18 +279,6 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 
 func readImage(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	diagnostics := make(diag.Diagnostics, 0)
-	buildContext := data.Get("context").(string)
-	previousContextHash := data.Get("context_digest")
-	contextHash, diags := getDirectoryHash(buildContext)
-
-	if len(diags) > 0 {
-		return diags
-	}
-
-	if previousContextHash != contextHash {
-		data.SetId(contextHash)
-		_ = data.Set("context_digest", contextHash)
-	}
 
 	provider := meta.(TerraformProviderBuildkit)
 	expected_targets := data.Get("publish_target").(*schema.Set).List()
@@ -353,7 +340,7 @@ func updateImage(context context.Context, data *schema.ResourceData, meta interf
 		"args",
 		"platforms",
 		"publish_target",
-		"context_digest",
+		"triggers",
 		"secrets_base64",
 	}
 
@@ -374,6 +361,23 @@ func deleteImage(context context.Context, data *schema.ResourceData, meta interf
 
 func fullImage(registry string, repository string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(registry, "https://"), "http://") + "/" + repository
+}
+
+func readDirectoryHashDataSource(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {
+	diagnostics := make(diag.Diagnostics, 0)
+
+	dir := data.Get("context").(string)
+	hash, err := getDirectoryHash(dir)
+
+	if hash == "" {
+		return err
+	}
+
+	id, _ := uuid.GenerateUUID()
+	data.SetId(id)
+	data.Set("hash", hash)
+
+	return diagnostics
 }
 
 func readImagesDataSource(context context.Context, data *schema.ResourceData, meta interface{}) diag.Diagnostics {

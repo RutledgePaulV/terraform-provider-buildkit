@@ -72,6 +72,24 @@ var ImageResource = &schema.Resource{
 	},
 }
 
+func buildkitDirectoryHashDataSource() *schema.Resource {
+	return &schema.Resource{
+		ReadContext: readDirectoryHashDataSource,
+		Schema: map[string]*schema.Schema{
+			"context": {
+				Type:        schema.TypeString,
+				Required:    true,
+				Description: "Path to the directory that should be used as the docker context.",
+			},
+			"hash": {
+				Type:        schema.TypeString,
+				Computed:    true,
+				Description: "The hash of the directory, excluding any .dockerignore files.",
+			},
+		},
+	}
+}
+
 func buildkitImagesDataSource() *schema.Resource {
 	return &schema.Resource{
 		ReadContext: readImagesDataSource,
@@ -134,7 +152,14 @@ func buildkitImageResource() *schema.Resource {
 			"id": {
 				Type:        schema.TypeString,
 				Computed:    true,
-				Description: "The hash of the context, except files which match a pattern contained in a .dockerignore file (if present).",
+				Description: "A unique identifier for the image.",
+			},
+			"triggers": {
+				Type:        schema.TypeMap,
+				Optional:    true,
+				ForceNew:    true,
+				Default:     map[string]string{},
+				Description: "A map of strings that will cause a change to the counter when any of the values change.",
 			},
 			"publish_target": {
 				Type:        schema.TypeSet,
@@ -198,12 +223,6 @@ func buildkitImageResource() *schema.Resource {
 				Optional:    true,
 				Default:     false,
 				Description: "Should the host running Terraform make their ssh agent socket available to the image being built by Buildkit?",
-			},
-			"context_digest": {
-				Type:        schema.TypeString,
-				ForceNew:    true,
-				Computed:    true,
-				Description: "The hash of the context, except files which match a pattern contained in a .dockerignore file (if present).",
 			},
 			"image_digest": {
 				Type:        schema.TypeString,

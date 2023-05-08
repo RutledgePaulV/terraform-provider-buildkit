@@ -127,6 +127,9 @@ func (ap *authProvider) credentials(host string) (*auth.CredentialsResponse, err
 	if ok {
 		res.Username = ac.username
 		res.Secret = ac.password
+	} else {
+		res.Username = ""
+		res.Secret = ""
 	}
 	return res, nil
 }
