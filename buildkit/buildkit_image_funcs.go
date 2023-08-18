@@ -222,9 +222,29 @@ func createImage(ctx context.Context, data *schema.ResourceData, meta interface{
 		}
 	}
 
+	cacheExports := []client.CacheOptionsEntry{
+		client.CacheOptionsEntry{
+			Type:  "inline",
+			Attrs: make(map[string]string, 0),
+		},
+	}
+	cacheImports := make([]client.CacheOptionsEntry, 0)
+
+	cacheRef := data.Get("cache_from").(string)
+	if cacheRef != "" {
+		cacheImports = append(cacheImports, client.CacheOptionsEntry{
+			Type: "registry",
+			Attrs: map[string]string{
+				"ref": cacheRef,
+			},
+		})
+	}
+
 	resp, err := cli.Solve(ctx, nil, client.SolveOpt{
-		Exports:  outputs,
-		Frontend: "dockerfile.v0",
+		CacheExports: cacheExports,
+		CacheImports: cacheImports,
+		Exports:      outputs,
+		Frontend:     "dockerfile.v0",
 		FrontendAttrs: merge(labels, args, map[string]string{
 			"platform": strings.Join(platforms, ","),
 		}),
