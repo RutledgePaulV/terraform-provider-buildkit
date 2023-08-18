@@ -69,6 +69,11 @@ var ImageResource = &schema.Resource{
 			Computed:    true,
 			Description: "Platform that is supported by this image.",
 		},
+		"cache_from": {
+			Type:        schema.TypeString,
+			Description: "Registry ref to use for --import-cache.",
+			Required:    false,
+		},
 	},
 }
 
